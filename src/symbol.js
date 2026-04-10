@@ -32,11 +32,11 @@ export class Symb {
   static emoji = '⬛';
   constructor() {
     this.multiplier = 1;
-    this.rarity = 0;
+    this.rarity = this.constructor.rarity ?? 0;
     this.turns = 0;
   }
   copy() {
-    throw new Error('Trying to get copy of base class.');
+    return new this.constructor();
   }
   async evaluateConsume() {}
   async evaluateProduce() {}
@@ -52,10 +52,10 @@ export class Symb {
     return [];
   }
   description() {
-    throw new Error('Trying to get description of base class.');
+    return this.constructor.description ?? '';
   }
   descriptionLong() {
-    return this.description();
+    return this.constructor.descriptionLong ?? this.description();
   }
   async addResource(game, x, y, key, value) {
     const source = game.board.getEmoji(x, y) || '❓';
@@ -83,6 +83,10 @@ export class Symb {
         cellDiv.removeChild(moneySpan);
       });
     }
+  }
+  async bounceScore(game, x, y, amount) {
+    await Util.animate(game.board.getSymbolDiv(x, y), 'bounce', 0.15);
+    await this.addMoney(game, amount, x, y);
   }
   async addMoney(game, score, x, y) {
     const value = score * this.multiplier;

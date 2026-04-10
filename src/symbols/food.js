@@ -2,6 +2,7 @@ import * as Util from '../util.js';
 
 import { chance, Symb, CATEGORY_UNBUYABLE } from '../symbol.js';
 import { Empty } from './ui.js';
+import { FortuneCookie } from './advanced.js';
 
 // Symbols in this file are related to food, beverages, or ingredients
 
@@ -9,16 +10,30 @@ export const CATEGORY_FOOD = Symbol('Food');
 export const CATEGORY_FRUIT = Symbol('Fruit');
 export const CATEGORY_VEGETABLES = Symbol('Vegetables');
 
+function belowRain(game, x, y) {
+  for (let ry = 0; ry < y; ry++) {
+    if (game.board.cells[ry][x].emoji() === '🌧️') return true;
+  }
+  return false;
+}
+
 export class Butter extends Symb {
   static emoji = '🧈';
-  constructor() {
-    super();
-    this.rarity = 0.1;
-  }
-  copy() {
-    return new Butter();
-  }
+  static rarity = 0.1;
+  static description = 'x4 to neighboring 🍿<br>removes neighboring 🥚 to become 🥣<br>melts after 7 turns';
+  static descriptionLong =
+    'this is butter. it quadruples the value of all neighboring 🍿. if next to 🥚, it consumes it and becomes 🥣. it disappears after 7 turns.';
   async evaluateConsume(game, x, y) {
+    const eggs = game.board.nextToSymbol(x, y, '🥚');
+    if (eggs.length > 0) {
+      const [ex, ey] = eggs[0];
+      await game.eventlog.showResourceLost(game.board.getEmoji(ex, ey), '', this.emoji());
+      await game.board.removeSymbol(game, ex, ey);
+      await game.board.removeSymbol(game, x, y);
+      await game.eventlog.showResourceEarned(Batter.emoji, '', this.emoji());
+      await game.board.addSymbol(game, new Batter(), x, y);
+      return;
+    }
     if (this.turns >= 7) {
       await game.board.removeSymbol(game, x, y);
     }
@@ -29,23 +44,121 @@ export class Butter extends Symb {
   categories() {
     return [CATEGORY_FOOD];
   }
-  description() {
-    return 'x4 to neighboring 🍿<br>melts after 5 turns';
+}
+
+export class Cheese extends Symb {
+  static emoji = '🧀';
+  static rarity = 0.02;
+  static description = '💵15<br>x2 per neighboring 🍹<br>x4 per neighboring 🍾';
+  static descriptionLong =
+    'this is cheese. it pays 💵15, x2 for each neighboring 🍹, and x4 for each neighboring 🍾.';
+  async score(game, x, y) {
+    const base = 15;
+    const champs = game.board.nextToSymbol(x, y, '🍾').length;
+    const cocktails = game.board.nextToSymbol(x, y, '🍹').length;
+    const mult = 4 ** champs * 2 ** cocktails;
+    await this.bounceScore(game, x, y, base * mult);
   }
-  descriptionLong() {
-    return 'this is butter. it quadruples the value of all neighboring 🍿. it disappears after 7 turns.';
+  categories() {
+    return [CATEGORY_FOOD];
+  }
+}
+
+export class Milk extends Symb {
+  static emoji = '🥛';
+  static rarity = 0.15;
+  static description = '💵10<br>merges with neighboring 🥛 to make 🧀 (10% chance: 🧈)<br>spoils after 4 turns';
+  static descriptionLong =
+    'this is milk. it pays 💵10. if next to another 🥛, they merge into 🧀 — 10% chance to make 🧈 instead. spoils after 4 turns.';
+  async score(game, x, y) {
+    await this.bounceScore(game, x, y, 10);
+  }
+  async evaluateConsume(game, x, y) {
+    const others = game.board.nextToSymbol(x, y, Milk.emoji);
+    if (others.length >= 1) {
+      await Util.animate(game.board.getSymbolDiv(x, y), 'flip', 0.25);
+      const [ox, oy] = others[0];
+      await game.eventlog.showResourceLost(game.board.getEmoji(ox, oy), '', Milk.emoji);
+      await game.board.removeSymbol(game, ox, oy);
+      await game.eventlog.showResourceLost(game.board.getEmoji(x, y), '', Milk.emoji);
+      await game.board.removeSymbol(game, x, y);
+      const product = chance(game, 0.1, x, y) ? new Butter() : new Cheese();
+      await game.eventlog.showResourceEarned(product.emoji(), '', Milk.emoji);
+      await game.board.addSymbol(game, product, x, y);
+      return;
+    }
+    if (this.turns >= 4) {
+      await game.board.removeSymbol(game, x, y);
+    }
+  }
+  counter(_) {
+    return Math.max(0, 4 - this.turns);
+  }
+  categories() {
+    return [CATEGORY_FOOD];
+  }
+}
+
+export class Chocolate extends Symb {
+  static emoji = '🍫';
+  static rarity = 0.05;
+  static description = '💵20';
+  static descriptionLong = 'this is chocolate. it pays 💵20.';
+  async score(game, x, y) {
+    await this.bounceScore(game, x, y, 20);
+  }
+  categories() {
+    return [CATEGORY_FOOD];
+  }
+}
+
+export class Batter extends Symb {
+  static emoji = '🥣';
+  static rarity = 0;
+  static description = 'removes neighboring 🍫 to become 🍪<br>removes neighboring 🍀 to become 🥠';
+  static descriptionLong =
+    'this is batter. it can remove neighboring 🍫 to become a 🍪 or remove neighboring 🍀 to become 🥠.';
+  async evaluateConsume(game, x, y) {
+    const tryTransform = async (symbol, CreatedClass, createdEmoji) => {
+      const neighbors = game.board.nextToSymbol(x, y, symbol);
+      if (neighbors.length === 0) return false;
+      const [nx, ny] = neighbors[0];
+      await game.eventlog.showResourceLost(game.board.getEmoji(nx, ny), '', this.emoji());
+      await game.board.removeSymbol(game, nx, ny);
+      await Util.animate(game.board.getSymbolDiv(x, y), 'flip', 0.25);
+      await game.board.removeSymbol(game, x, y);
+      await game.eventlog.showResourceEarned(createdEmoji, '', this.emoji());
+      await game.board.addSymbol(game, new CreatedClass(), x, y);
+      return true;
+    };
+    await tryTransform(Chocolate.emoji, Cookie, Cookie.emoji) ||
+    await tryTransform('🍀', FortuneCookie, '🥠');
+  }
+  categories() {
+    return [CATEGORY_FOOD, CATEGORY_UNBUYABLE];
+  }
+}
+
+export class Cookie extends Symb {
+  static emoji = '🍪';
+  static rarity = 0.02;
+  static description = '💵30<br>x3 per neighboring 🥛';
+  static descriptionLong = 'this is a cookie. it pays 💵30, x3 for each neighboring 🥛.';
+  async score(game, x, y) {
+    const milks = game.board.nextToSymbol(x, y, Milk.emoji).length;
+    await this.bounceScore(game, x, y, 30 * 3 ** milks);
+  }
+  categories() {
+    return [CATEGORY_FOOD];
   }
 }
 
 export class Cherry extends Symb {
   static emoji = '🍒';
-  constructor() {
-    super();
-    this.rarity = 0.8;
-  }
-  copy() {
-    return new Cherry();
-  }
+  static rarity = 0.8;
+  static description = '💵2 for each neighboring 🍒';
+  static descriptionLong =
+    'this is a cherry. it pays 💵2 for each other 🍒 next to it.';
   async score(game, x, y) {
     const coords = game.board.nextToSymbol(x, y, Cherry.emoji);
     if (coords.length === 0) {
@@ -57,23 +170,14 @@ export class Cherry extends Symb {
   categories() {
     return [CATEGORY_FOOD, CATEGORY_FRUIT];
   }
-  description() {
-    return '💵2 for each neighboring 🍒';
-  }
-  descriptionLong() {
-    return 'this is a cherry. it pays 💵2 for each other 🍒 next to it.';
-  }
 }
 
 export class Corn extends Symb {
   static emoji = '🌽';
-  constructor() {
-    super();
-    this.rarity = 0.2;
-  }
-  copy() {
-    return new Corn();
-  }
+  static rarity = 0.2;
+  static description = '💵21<br>15% chance: pops 🍿';
+  static descriptionLong =
+    'this is corn. it pays 💵21 and has a 15% chance to pop 🍿 on nearby empty spaces.';
   async score(game, x, y) {
     await Util.animate(game.board.getSymbolDiv(x, y), 'bounce', 0.15);
     await this.addMoney(game, 21, x, y);
@@ -83,24 +187,17 @@ export class Corn extends Symb {
     if (coords.length === 0) {
       return;
     }
-    if (chance(game, 0.15, x, y)) {
-      for (let i = 0; i < coords.length; ++i) {
-        const [newX, newY] = coords[i];
-        const popcorn = new Popcorn();
-        await Util.animate(game.board.getSymbolDiv(x, y), 'grow', 0.15);
-        await game.eventlog.showResourceEarned(popcorn.emoji(), '', this.emoji());
-        await game.board.addSymbol(game, popcorn, newX, newY);
-      }
+    if (!belowRain(game, x, y) && !chance(game, 0.15, x, y)) return;
+    for (let i = 0; i < coords.length; ++i) {
+      const [newX, newY] = coords[i];
+      const popcorn = new Popcorn();
+      await Util.animate(game.board.getSymbolDiv(x, y), 'grow', 0.15);
+      await game.eventlog.showResourceEarned(popcorn.emoji(), '', this.emoji());
+      await game.board.addSymbol(game, popcorn, newX, newY);
     }
   }
   categories() {
     return [CATEGORY_VEGETABLES, CATEGORY_FOOD];
-  }
-  description() {
-    return '💵21<br>15% chance: pops 🍿';
-  }
-  descriptionLong() {
-    return 'this is corn. it pays 💵21, and has a 15% chance to pop, making 🍿 on all empty space nearby.';
   }
 }
 
@@ -137,13 +234,10 @@ export class Corn extends Symb {
 
 export class Pineapple extends Symb {
   static emoji = '🍍';
-  constructor() {
-    super();
-    this.rarity = 0.4;
-  }
-  copy() {
-    return new Pineapple();
-  }
+  static rarity = 0.4;
+  static description = '💵12<br>💵-2 for all non-empty neighbors';
+  static descriptionLong =
+    'this is a pineapple. it pays 💵12, minus 💵2 for all neighboring symbols that are not empty.';
   async score(game, x, y) {
     const coords = game.board.nextToExpr(
       x,
@@ -156,23 +250,49 @@ export class Pineapple extends Symb {
   categories() {
     return [CATEGORY_FRUIT, CATEGORY_FOOD];
   }
-  description() {
-    return '💵12<br>💵-2 for all non-empty neighbors';
+}
+
+export class Crop extends Symb {
+  static emoji = '🌱';
+  static rarity = 0;
+  static description = '💵1<br>becomes 🌽 in 3 turns';
+  static descriptionLong =
+    'this is a crop. it pays 💵1 and becomes 🌽 in 3 turns.';
+  async score(game, x, y) {
+    await this.bounceScore(game, x, y, 1);
   }
-  descriptionLong() {
-    return 'this is a pineapple. it pays 💵12, minus 💵2 for all neighboring symbols that are not empty.';
+  categories() {
+    return [CATEGORY_VEGETABLES, CATEGORY_FOOD, CATEGORY_UNBUYABLE];
+  }
+  counter(_) {
+    return Math.max(0, 3 - this.turns);
+  }
+  async checkGrowth(game, x, y) {
+    if (this.turns < 3) return;
+    const sym = new Corn();
+    await Util.animate(game.board.getSymbolDiv(x, y), 'flip', 0.25);
+    await game.board.removeSymbol(game, x, y);
+    await game.board.addSymbol(game, sym, x, y);
+    await game.eventlog.showResourceEarned(sym.emoji(), '', this.emoji());
+  }
+  async evaluateProduce(game, x, y) {
+    if (belowRain(game, x, y)) {
+      this.turns = 3;
+    }
+    game.board.redrawCell(game, x, y);
+    await this.checkGrowth(game, x, y);
   }
 }
 
 export class Popcorn extends Symb {
   static emoji = '🍿';
+  static rarity = 0;
+  static description = '💵17<br>disappears after 2-7 turns';
+  static descriptionLong =
+    'this is popcorn. it pays 💵17 and disappears after 2-7 turns.';
   constructor() {
     super();
-    this.rarity = 0;
     this.timeToLive = 2 + Util.random(6);
-  }
-  copy() {
-    return new Popcorn();
   }
   async score(game, x, y) {
     const butter = game.board.nextToSymbol(x, y, Butter.emoji);
@@ -194,23 +314,14 @@ export class Popcorn extends Symb {
   categories() {
     return [CATEGORY_FOOD];
   }
-  description() {
-    return '💵17<br>disappears after 2-7 turns';
-  }
-  descriptionLong() {
-    return 'this is popcorn. it pays 💵17 and disappears after 2-7 turns.';
-  }
 }
 
 export class Bubble extends Symb {
   static emoji = '🫧';
-  constructor() {
-    super();
-    this.rarity = 0;
-  }
-  copy() {
-    return new Bubble();
-  }
+  static rarity = 0;
+  static description = 'disappears after 3 turns';
+  static descriptionLong =
+    "this is a bubble. it doesn't really do anything. it will disappear after 3 turns.";
   async evaluateConsume(game, x, y) {
     if (this.turns < 3) {
       return;
@@ -220,12 +331,6 @@ export class Bubble extends Symb {
   counter(_) {
     return 3 - this.turns;
   }
-  description() {
-    return 'disappears after 3 turns';
-  }
-  descriptionLong() {
-    return "this is a bubble. it doesn't really do anything. it will disappear after 3 turns.";
-  }
   categories() {
     return [CATEGORY_UNBUYABLE];
   }
@@ -233,9 +338,13 @@ export class Bubble extends Symb {
 
 export class Cocktail extends Symb {
   static emoji = '🍹';
+  static rarity = 0.27;
+  static description =
+    '💵2 per 🍒 removed.<br>💵4 per 🍍 removed.<br>x1.5 per 🍾 removed.';
+  static descriptionLong =
+    'this is a cocktail. it permanently gives more 💵 by removing neighboring 🍒 (💵2), 🍍 (💵4) and 🍾 (x1.5).';
   constructor(cherryScore = 0) {
     super();
-    this.rarity = 0.27;
     this.cherryScore = cherryScore;
   }
   copy() {
@@ -268,23 +377,14 @@ export class Cocktail extends Symb {
   counter(_) {
     return this.cherryScore;
   }
-  description() {
-    return '💵2 per 🍒 removed.<br>💵4 per 🍍 removed.<br>x1.5 per 🍾 removed.';
-  }
-  descriptionLong() {
-    return 'this is a cocktail. it permanently gives more 💵 by removing neighboring 🍒 (💵2), 🍍 (💵4) and 🍾 (x1.5).';
-  }
 }
 
 export class Champagne extends Symb {
   static emoji = '🍾';
-  constructor() {
-    super();
-    this.rarity = 0.07;
-  }
-  copy() {
-    return new Champagne();
-  }
+  static rarity = 0.07;
+  static description = '💵70<br>after 3 turns: explodes';
+  static descriptionLong =
+    'this is a champagne. it pays 💵70, but explodes after 3 turns, making 🫧 on empty neighboring spaces and itself.';
   async score(game, x, y) {
     await Util.animate(game.board.getSymbolDiv(x, y), 'bounce', 0.15);
     await this.addMoney(game, 70, x, y);
@@ -314,37 +414,28 @@ export class Champagne extends Symb {
   counter(_) {
     return 3 - this.turns;
   }
-  description() {
-    return '💵70<br>after 3 turns: explodes';
-  }
-  descriptionLong() {
-    return 'this is a champagne. it pays 💵70, but explodes after 3 turns, making 🫧 on empty neighboring spaces and itself.';
-  }
 }
 
 export class Tree extends Symb {
   static emoji = '🌳';
-  constructor() {
-    super();
-    this.rarity = 0.4;
-    this.turns = 0;
-  }
-  copy() {
-    return new Tree();
-  }
+  static rarity = 0.4;
+  static description = 'every 3 turns: grows 🍒🍒';
+  static descriptionLong =
+    'this is a tree. every 3 turns, it grows up to two 🍒 on nearby empty space.';
   async evaluateProduce(game, x, y) {
     const grow = async () => {
       const coords = game.board.nextToEmpty(x, y);
-      if (coords.length === 0) {
-        return;
-      }
+      if (coords.length === 0) return;
       const [newX, newY] = Util.randomRemove(coords);
       const cherry = new Cherry();
       await Util.animate(game.board.getSymbolDiv(x, y), 'grow', 0.15);
       await game.eventlog.showResourceEarned(cherry.emoji(), '', this.emoji());
       await game.board.addSymbol(game, cherry, newX, newY);
     };
-
+    if (belowRain(game, x, y)) {
+      this.turns = 3;
+      game.board.redrawCell(game, x, y);
+    }
     if (this.turns % 3 === 0) {
       await grow();
       await grow();
@@ -352,11 +443,5 @@ export class Tree extends Symb {
   }
   counter(_) {
     return 3 - (this.turns % 3);
-  }
-  description() {
-    return 'every 3 turns: grows 🍒🍒';
-  }
-  descriptionLong() {
-    return 'this is a tree. every 3 turns, it will grow up to two 🍒 on nearby empty space.';
   }
 }

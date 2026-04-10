@@ -1,4 +1,3 @@
-import * as Const from '../consts.js';
 import * as Util from '../util.js';
 
 import {
@@ -30,46 +29,30 @@ const onToolBuy = async (game, prompt, effect) => {
 
 export class Pin extends Symb {
   static emoji = '📌';
-  constructor() {
-    super();
-    this.rarity = 0.08;
-  }
+  static rarity = 0.08;
+  static description = 'pins a cell in place<br>pops 🎈 and 🫧';
+  static descriptionLong = "this is a tool. it allows pinning a symbol in place. if you click a 🎈 or 🫧, it pops instead. it doesn't appear on the board as a symbol.";
   categories() {
     return [CATEGORY_TOOL];
   }
-  copy() {
-    return new Pin();
-  }
-  description() {
-    return 'pins a cell in place';
-  }
-  descriptionLong() {
-    return 'this is a tool. it allows pinning a symbol in place. it doesn\'t appear on the board as a symbol.';
-  }
   async onBuy(game) {
     await onToolBuy(game, 'click on a symbol to pin in place', async (game, x, y) => {
-      await game.board.pinCell(game, x, y);
+      if (game.board.cells[y][x].emoji() === '🎈' || game.board.cells[y][x].emoji() === '🫧') {
+        await game.board.removeSymbol(game, x, y);
+      } else {
+        await game.board.pinCell(game, x, y);
+      }
     });
   }
 }
 
 export class Axe extends Symb {
   static emoji = '🪓';
-  constructor() {
-    super();
-    this.rarity = 0.07;
-  }
+  static rarity = 0.07;
+  static description = 'removes a cell from inventory';
+  static descriptionLong = 'this is a tool. it allows removing a symbol from the inventory. it doesn\'t appear on the board as a symbol.';
   categories() {
     return [CATEGORY_TOOL];
-  }
-  copy() {
-    return new Axe();
-  }
-  description() {
-    return 'removes a cell from inventory';
-  }
-  descriptionLong() {
-    return 'this is a tool. it allows removing a symbol from the inventory. it doesn\'t appear on the board as a symbol.';
   }
   async onBuy(game) {
     await onToolBuy(game, 'click on a symbol to remove', async (game, x, y) => {
@@ -80,21 +63,11 @@ export class Axe extends Symb {
 
 export class Eye extends Symb {
   static emoji = '🧿';
-  constructor() {
-    super();
-    this.rarity = 0.06;
-  }
+  static rarity = 0.06;
+  static description = 'converts a symbol into a passive ability';
+  static descriptionLong = 'this is a tool. it converts a symbol into a passive ability. this doesn\'t appear on the board as a symbol. passive symbols don\'t have neighbors.';
   categories() {
     return [CATEGORY_TOOL];
-  }
-  copy() {
-    return new Eye();
-  }
-  description() {
-    return 'converts a symbol into a passive ability';
-  }
-  descriptionLong() {
-    return 'this is a tool. it converts a symbol into a passive ability. this doesn\'t appear on the board as a symbol. passive symbols don\'t have neighbors.';
   }
   async onBuy(game) {
     await onToolBuy(game, 'click on a symbol to convert', async (game, x, y) => {

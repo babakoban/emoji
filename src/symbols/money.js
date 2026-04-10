@@ -1,4 +1,3 @@
-import * as Const from '../consts.js';
 import * as Util from '../util.js';
 
 import { badChance, chance, Symb } from '../symbol.js';
@@ -10,13 +9,9 @@ export const CATEGORY_BUSINESS = Symbol('Business');
 
 export class Coin extends Symb {
   static emoji = '🪙';
-  constructor() {
-    super();
-    this.rarity = 1;
-  }
-  copy() {
-    return new Coin();
-  }
+  static rarity = 1;
+  static description = '💵2';
+  static descriptionLong = 'this is a coin. it pays 💵2.';
   getValue(game) {
     const activeCount = game.board.forAllExpr(
       (e, _x, _y) => e.emoji() === FlyingMoney.emoji).length;
@@ -24,55 +19,39 @@ export class Coin extends Symb {
     return 2 + activeCount + passiveCount;
   }
   async score(game, x, y) {
-    await Util.animate(game.board.getSymbolDiv(x, y), 'bounce', 0.15);
-    await this.addMoney(game, this.getValue(game), x, y);
-  }
-  description() {
-    return '💵2';
-  }
-  descriptionLong() {
-    return 'this is a coin. it pays 💵2.';
+    await this.bounceScore(game, x, y, this.getValue(game));
   }
 }
 
 export class Briefcase extends Symb {
   static emoji = '💼';
+  static rarity = 0.13;
+  static description = '💵5 for every 4 symbols in inventory';
+  static descriptionLong = 'this is a briefcase. it pays 💵5 for every 4 symbols you have in your inventory.';
   constructor() {
     super();
-    this.rarity = 0.13;
     this.count = 0;
-  }
-  copy() {
-    return new Briefcase();
   }
   async score(game, x, y) {
     const value = this.counter(game);
-    await Util.animate(game.board.getSymbolDiv(x, y), 'bounce', 0.15);
-    await this.addMoney(game, value, x, y);
+    await this.bounceScore(game, x, y, value);
   }
-  catgories() {
+  categories() {
     return [CATEGORY_BUSINESS];
   }
   counter(game) {
     return Math.trunc(game.inventory.symbols.length / 4) * 5;
   }
-  description() {
-    return '💵5 for every 4 symbols in inventory';
-  }
-  descriptionLong() {
-    return 'this is a briefcase. it pays 💵5 for every 4 symbols you have in your inventory.';
-  }
 }
 
 export class Bank extends Symb {
   static emoji = '🏦';
+  static rarity = 0.4;
+  static description = 'every turn: makes 🪙';
+  static descriptionLong = 'this is a bank. if there is empty space nearby, it will put 🪙 there.';
   constructor() {
     super();
     this.turns = 0;
-    this.rarity = 0.4;
-  }
-  copy() {
-    return new Bank();
   }
   async evaluateProduce(game, x, y) {
     const mint = async () => {
@@ -88,23 +67,19 @@ export class Bank extends Symb {
     };
     await mint();
   }
-  catgories() {
+  categories() {
     return [CATEGORY_BUSINESS];
-  }
-  description() {
-    return 'every turn: makes 🪙';
-  }
-  descriptionLong() {
-    return 'this is a bank. if there is empty space nearby, it will put 🪙 there.';
   }
 }
 
 export class CreditCard extends Symb {
   static emoji = '💳';
+  static rarity = 0.35;
+  static description = '💵1000 now.<br>💵-1100 on last turn';
+  static descriptionLong = "this is a credit card. it pays 💵1000, but takes 💵1100 when on board on your last turn.";
   constructor(turn = 0) {
     super();
     this.turn = turn;
-    this.rarity = 0.35;
   }
   copy() {
     return new CreditCard();
@@ -116,24 +91,19 @@ export class CreditCard extends Symb {
   async score(game, x, y) {
     this.turn += 1;
     if (this.turn === 1) {
-      await Util.animate(game.board.getSymbolDiv(x, y), 'bounce', 0.15);
-      await this.addMoney(game, 1000, x, y);
+      await this.bounceScore(game, x, y, 1000);
     }
-  }
-  description() {
-    return '💵1000 now.<br>💵-1100 on last turn';
-  }
-  descriptionLong() {
-    return "this is a credit card. it pays 💵1000, but takes 💵1100 when on board on your last turn.";
   }
 }
 
 export class MoneyBag extends Symb {
   static emoji = '💰';
+  static rarity = 0.5;
+  static description = 'collects neighboring 🪙';
+  static descriptionLong = 'this is a money bag. it collects neighboring 🪙 and stacks them up.';
   constructor(coins = 0) {
     super();
     this.coins = coins;
-    this.rarity = 0.5;
     this.coin = new Coin();  // Used to calculate current coin value.
   }
   copy() {
@@ -142,8 +112,7 @@ export class MoneyBag extends Symb {
   async score(game, x, y) {
     if (this.coins > 0) {
       const value = this.coins * this.coin.getValue(game);
-      await Util.animate(game.board.getSymbolDiv(x, y), 'bounce', 0.15);
-      await this.addMoney(game, value, x, y);
+      await this.bounceScore(game, x, y, value);
     }
   }
   async evaluateConsume(game, x, y) {
@@ -162,27 +131,16 @@ export class MoneyBag extends Symb {
   counter(_) {
     return this.coins;
   }
-  description() {
-    return 'collects neighboring 🪙';
-  }
-  descriptionLong() {
-    return 'this is a money bag. it collects neighboring 🪙 and stacks them up.';
-  }
 }
 
 export class Jar extends Symb {
   static emoji = '🫙';
-  constructor() {
-    super();
-    this.rarity = 0.15;
-  }
-  copy() {
-    return new Jar();
-  }
+  static rarity = 0.15;
+  static description = '💵8 per different symbol in inventory';
+  static descriptionLong = 'this is a jar. it pays 💵8 for all the different symbols in your inventory.';
   async score(game, x, y) {
     const value = this.counter(game) * 8;
-    await Util.animate(game.board.getSymbolDiv(x, y), 'bounce', 0.15);
-    await this.addMoney(game, value, x, y);
+    await this.bounceScore(game, x, y, value);
   }
   categories() {
     return [CATEGORY_GAMBLING];
@@ -190,23 +148,13 @@ export class Jar extends Symb {
   counter(game) {
     return new Set(game.inventory.symbols.map((s) => s.emoji())).size;
   }
-  description() {
-    return '💵8 per different symbol in inventory';
-  }
-  descriptionLong() {
-    return 'this is a jar. it pays 💵8 for all the different symbols in your inventory.';
-  }
 }
 
 export class Dice extends Symb {
   static emoji = '🎲';
-  constructor() {
-    super();
-    this.rarity = 0.11;
-  }
-  copy() {
-    return new Dice();
-  }
+  static rarity = 0.11;
+  static description = '80% chance: 💵-123<br>20% chance: 💵456';
+  static descriptionLong = 'this is a die. it has 80% chance to pay 💵-123 and 20% chance to pay 💵456.';
   cost() {
     return {'💵': 77};
   }
@@ -222,29 +170,13 @@ export class Dice extends Symb {
   categories() {
     return [CATEGORY_GAMBLING];
   }
-  description() {
-    return '80% chance: 💵-123<br>20% chance: 💵456';
-  }
-  descriptionLong() {
-    return 'this is a die. it has 80% chance to pay 💵-123 and 20% chance to pay 💵456.';
-  }
 }
 
 export class FlyingMoney extends Symb {
   static emoji = '💸';
-  constructor() {
-    super();
-    this.rarity = 0.12;
-  }
-  copy() {
-    return new FlyingMoney();
-  }
-  async score(game, x, y) {
-  }
-  description() {
-    return 'each 🪙 is worth 💵1 more.';
-  }
-  descriptionLong() {
-    return 'increases the value of each 🪙 you have by 💵1.';
+  static rarity = 0.12;
+  static description = 'each 🪙 is worth 💵1 more.';
+  static descriptionLong = 'increases the value of each 🪙 you have by 💵1.';
+  async score(_game, _x, _y) {
   }
 }
