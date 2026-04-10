@@ -9,6 +9,7 @@ https://discord.com/invite/wyCDHsuk
 
 # Changelog (fork of balidani/emoji)
 Not fully balanced, just messing around with some ideas.
+
 Design goal for changes: Add more interactions between different item categories and build types.
 
 ### New Items
@@ -45,7 +46,3 @@ Design goal for changes: Add more interactions between different item categories
 | Pin 📌 | Using on 🎈 or 🫧 pops it instead of pinning it |
 
 ---
-
-### VS Code
-- Install Live Server extension, https://marketplace.visualstudio.com/items?itemName=ritwickdey.LiveServer
-- CMD + L, CMD + O to open browser to http://127.0.0.1:5500/
